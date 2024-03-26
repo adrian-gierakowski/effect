@@ -3,8 +3,9 @@
     nixpkgs = {
       url = "github:nixos/nixpkgs/nixpkgs-unstable";
     };
+    nixpkgs-node14.url = github:NixOS/nixpkgs?rev=nixpkgs/a71323f68d4377d12c04a5410e214495ec598d4c;
   };
-  outputs = {nixpkgs, ...}: let
+  outputs = {nixpkgs, nixpkgs-node14, ...}: let
     systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
     forAllSystems = nixpkgs.lib.genAttrs systems;
   in {
@@ -17,7 +18,8 @@
     devShells = forAllSystems (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
-        node = pkgs.nodejs_20;
+        pkgs-node14 = nixpkgs-node14.legacyPackages.${system};
+        node = pkgs-node14.nodejs_14;
         corepackEnable = pkgs.runCommand "corepack-enable" {} ''
           mkdir -p $out/bin
           ${node}/bin/corepack enable --install-directory $out/bin
