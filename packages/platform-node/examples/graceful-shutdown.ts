@@ -1,7 +1,7 @@
-import { NodeHttpServer, NodeRuntime } from '@effect/platform-node'
-import * as HttpServer from '@effect/platform/HttpServer'
-import * as HttpServerResponse from '@effect/platform/HttpServerResponse'
-import { Duration, Effect } from 'effect'
+import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
+import * as HttpServer from "@effect/platform/HttpServer"
+import * as HttpServerResponse from "@effect/platform/HttpServerResponse"
+import { Duration, Effect } from "effect"
 import * as Http from "node:http"
 
 /**
@@ -14,15 +14,15 @@ import * as Http from "node:http"
 
 // A simple app that simulates a long-running task
 const HttpAppLive = Effect.gen(function*() {
-  console.log('Request received, processing for 5 seconds...')
+  console.log("Request received, processing for 5 seconds...")
   yield* Effect.sleep(Duration.seconds(5))
-  console.log('Request processed!')
-  return HttpServerResponse.text('Done!')
+  console.log("Request processed!")
+  return HttpServerResponse.text("Done!")
 })
 
 // Configure and start the server
 const ServerLive = NodeHttpServer.layer(() => Http.createServer(), {
-  port: 3000,
+  port: 3000
 })
 
 const program = Effect.gen(function*() {
@@ -31,7 +31,7 @@ const program = Effect.gen(function*() {
   return yield* Effect.never
 }).pipe(
   Effect.scoped,
-  Effect.provide(ServerLive),
+  Effect.provide(ServerLive)
 )
 
 // Run the program using runMain which handles SIGINT/SIGTERM

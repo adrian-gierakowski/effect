@@ -1,8 +1,7 @@
-
 import { HttpClient, HttpServerResponse } from "@effect/platform"
-import { NodeHttpServer, NodeHttpClient } from "@effect/platform-node"
+import { NodeHttpClient, NodeHttpServer } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Duration, Fiber, Scope, Exit } from "effect"
+import { Duration, Effect, Exit, Fiber, Scope } from "effect"
 import * as Http from "node:http"
 
 describe("Graceful Shutdown", () => {
