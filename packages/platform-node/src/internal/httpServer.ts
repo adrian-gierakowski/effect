@@ -14,7 +14,7 @@ import type * as ServerResponse from "@effect/platform/HttpServerResponse"
 import type * as Multipart from "@effect/platform/Multipart"
 import type * as Path from "@effect/platform/Path"
 import * as Socket from "@effect/platform/Socket"
-import type * as Cause from "effect/Cause"
+import * as Cause from "effect/Cause"
 import * as Chunk from "effect/Chunk"
 import * as Config from "effect/Config"
 import * as Effect from "effect/Effect"
@@ -23,6 +23,7 @@ import { type LazyArg, pipe } from "effect/Function"
 import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import type { ReadonlyRecord } from "effect/Record"
+import * as Ref from "effect/Ref"
 import * as Runtime from "effect/Runtime"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
@@ -44,19 +45,24 @@ export const make = (
 ): Effect.Effect<Server.HttpServer, Error.ServeError, Scope.Scope> =>
   Effect.gen(function*() {
     const scope = yield* Effect.scope
+    const fiberSet = yield* FiberSet.make<any, any>()
+    const finalizing = yield* Ref.make(false)
     const server = yield* Effect.acquireRelease(
       Effect.sync(evaluate),
       (server) =>
-        Effect.async<void>((resume) => {
-          if (!server.listening) {
-            return resume(Effect.void)
-          }
-          server.close((error) => {
-            if (error) {
-              resume(Effect.die(error))
-            } else {
-              resume(Effect.void)
+        Effect.gen(function*() {
+          yield* FiberSet.awaitEmpty(fiberSet)
+          yield* Effect.async<void>((resume) => {
+            if (!server.listening) {
+              return resume(Effect.void)
             }
+            server.close((error) => {
+              if (error) {
+                resume(Effect.die(error))
+              } else {
+                resume(Effect.void)
+              }
+            })
           })
         })
     )
@@ -99,10 +105,18 @@ export const make = (
         },
       serve: (httpApp, middleware) =>
         Effect.gen(function*() {
-          const handler = yield* makeHandler(httpApp, middleware!)
-          const upgradeHandler = yield* makeUpgradeHandler(wss, httpApp, middleware!)
+          const handler = yield* makeHandler(httpApp, middleware!, fiberSet, finalizing)
+          const upgradeHandler = yield* makeUpgradeHandler(
+            wss,
+            httpApp,
+            middleware!,
+            fiberSet,
+            finalizing
+          )
           yield* Effect.addFinalizer(() =>
-            Effect.sync(() => {
+            Effect.gen(function*() {
+              yield* Ref.set(finalizing, true)
+              yield* FiberSet.awaitEmpty(fiberSet)
               server.off("request", handler)
               server.off("upgrade", upgradeHandler)
             })
@@ -120,20 +134,22 @@ export const make = (
 
 /** @internal */
 export const makeHandler: {
-  <R, E>(httpApp: App.Default<E, R>): Effect.Effect<
+  <R, E>(
+    httpApp: App.Default<E, R>,
+    middleware?: Middleware.HttpMiddleware,
+    fiberSet?: FiberSet.FiberSet<any, any>,
+    finalizing?: Ref.Ref<boolean>
+  ): Effect.Effect<
     (nodeRequest: Http.IncomingMessage, nodeResponse: Http.ServerResponse) => void,
     never,
     Exclude<R, ServerRequest.HttpServerRequest | Scope.Scope>
   >
-  <R, E, App extends App.Default<any, any>>(
-    httpApp: App.Default<E, R>,
-    middleware: Middleware.HttpMiddleware.Applied<App, E, R>
-  ): Effect.Effect<
-    (nodeRequest: Http.IncomingMessage, nodeResponse: Http.ServerResponse) => void,
-    never,
-    Exclude<Effect.Effect.Context<App>, ServerRequest.HttpServerRequest | Scope.Scope>
-  >
-} = <E, R>(httpApp: App.Default<E, R>, middleware?: Middleware.HttpMiddleware) => {
+} = <E, R>(
+  httpApp: App.Default<E, R>,
+  middleware?: Middleware.HttpMiddleware,
+  fiberSet?: FiberSet.FiberSet<any, any>,
+  finalizing?: Ref.Ref<boolean>
+) => {
   const handledApp = App.toHandled(httpApp, handleResponse, middleware)
   return Effect.map(Effect.runtime<R>(), (runtime) => {
     const runFork = Runtime.runFork(runtime)
@@ -141,6 +157,11 @@ export const makeHandler: {
       nodeRequest: Http.IncomingMessage,
       nodeResponse: Http.ServerResponse
     ) {
+      if (finalizing && Effect.runSync(Ref.get(finalizing))) {
+        nodeResponse.writeHead(503)
+        nodeResponse.end()
+        return
+      }
       const fiber = runFork(
         Effect.provideService(
           handledApp,
@@ -148,28 +169,50 @@ export const makeHandler: {
           new ServerRequestImpl(nodeRequest, nodeResponse)
         )
       )
+      if (fiberSet) {
+        FiberSet.unsafeAdd(fiberSet, fiber)
+      }
       nodeResponse.on("close", () => {
         if (!nodeResponse.writableEnded) {
           fiber.unsafeInterruptAsFork(Error.clientAbortFiberId)
         }
       })
     }
-  })
+  }) as any
 }
 
 /** @internal */
-export const makeUpgradeHandler = <R, E>(
+export const makeUpgradeHandler: {
+  <R, E>(
+    lazyWss: Effect.Effect<WS.WebSocketServer>,
+    httpApp: App.Default<E, R>,
+    middleware?: Middleware.HttpMiddleware,
+    fiberSet?: FiberSet.FiberSet<any, any>,
+    finalizing?: Ref.Ref<boolean>
+  ): Effect.Effect<
+    (nodeRequest: Http.IncomingMessage, socket: Duplex, head: Buffer) => void,
+    never,
+    Exclude<R, ServerRequest.HttpServerRequest | Scope.Scope>
+  >
+} = <R, E>(
   lazyWss: Effect.Effect<WS.WebSocketServer>,
   httpApp: App.Default<E, R>,
-  middleware?: Middleware.HttpMiddleware
+  middleware?: Middleware.HttpMiddleware,
+  fiberSet?: FiberSet.FiberSet<any, any>,
+  finalizing?: Ref.Ref<boolean>
 ) => {
   const handledApp = App.toHandled(httpApp, handleResponse, middleware)
-  return Effect.map(FiberSet.makeRuntime<R>(), (runFork) =>
-    function handler(
+  return Effect.map(Effect.runtime<R>(), (runtime) => {
+    const runFork = Runtime.runFork(runtime)
+    return function handler(
       nodeRequest: Http.IncomingMessage,
       socket: Duplex,
       head: Buffer
     ) {
+      if (finalizing && Effect.runSync(Ref.get(finalizing))) {
+        socket.end()
+        return
+      }
       let nodeResponse_: Http.ServerResponse | undefined = undefined
       const nodeResponse = () => {
         if (nodeResponse_ === undefined) {
@@ -200,12 +243,16 @@ export const makeUpgradeHandler = <R, E>(
           new ServerRequestImpl(nodeRequest, nodeResponse, upgradeEffect)
         )
       )
+      if (fiberSet) {
+        FiberSet.unsafeAdd(fiberSet, fiber)
+      }
       socket.on("close", () => {
         if (!socket.writableEnded) {
           fiber.unsafeInterruptAsFork(Error.clientAbortFiberId)
         }
       })
-    })
+    }
+  }) as any
 }
 
 class ServerRequestImpl extends HttpIncomingMessageImpl<Error.RequestError> implements ServerRequest.HttpServerRequest {

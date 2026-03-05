@@ -39,19 +39,14 @@ export const make: (
  */
 export const makeHandler: {
   <R, E>(
-    httpApp: App.Default<E, R>
+    httpApp: App.Default<E, R>,
+    middleware?: Middleware.HttpMiddleware,
+    fiberSet?: FiberSet.FiberSet<any, any>,
+    finalizing?: Ref.Ref<boolean>
   ): Effect.Effect<
     (nodeRequest: Http.IncomingMessage, nodeResponse: Http.ServerResponse) => void,
     never,
     Exclude<R, ServerRequest.HttpServerRequest | Scope.Scope>
-  >
-  <R, E, App extends App.Default<any, any>>(
-    httpApp: App.Default<E, R>,
-    middleware: Middleware.HttpMiddleware.Applied<App, E, R>
-  ): Effect.Effect<
-    (nodeRequest: Http.IncomingMessage, nodeResponse: Http.ServerResponse) => void,
-    never,
-    Exclude<Effect.Effect.Context<App>, ServerRequest.HttpServerRequest | Scope.Scope>
   >
 } = internal.makeHandler
 
