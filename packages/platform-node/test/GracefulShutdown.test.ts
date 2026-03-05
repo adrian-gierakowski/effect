@@ -1,8 +1,8 @@
 
-import { HttpClient, HttpServer, HttpServerResponse } from "@effect/platform"
+import { HttpClient, HttpServerResponse } from "@effect/platform"
 import { NodeHttpServer, NodeHttpClient } from "@effect/platform-node"
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Duration, Fiber, Scope } from "effect"
+import { Effect, Duration, Fiber, Scope, Exit } from "effect"
 import * as Http from "node:http"
 
 describe("Graceful Shutdown", () => {
@@ -36,7 +36,7 @@ describe("Graceful Shutdown", () => {
       yield* Effect.sleep(Duration.millis(100))
 
       // Start shutdown by closing the scope
-      const shutdownFiber = yield* Scope.close(scope, Effect.void).pipe(Effect.fork)
+      const shutdownFiber = yield* Scope.close(scope, Exit.void).pipe(Effect.fork)
       // wait a bit for finalizing to be set but before fiberSet is empty
       yield* Effect.sleep(Duration.millis(200))
 
