@@ -17,11 +17,11 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             bun
-            corepack
             deno
             nodejs-slim_23
             python3
             yq-go
+            pnpm_10
           ];
         };
       });
