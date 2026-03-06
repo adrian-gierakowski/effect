@@ -51,6 +51,10 @@ export const make = (
           if (!server.listening) {
             return resume(Effect.void)
           }
+          // The callback passed to server.close() will only be called when all
+          // in-flight requests and their corresponding sockets are fully closed.
+          // This means that when the effect is interrupted (or the scope is closed),
+          // it will naturally wait for existing connections to complete.
           server.close((error) => {
             if (error) {
               resume(Effect.die(error))
