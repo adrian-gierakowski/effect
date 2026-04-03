@@ -41,6 +41,7 @@ export interface HttpClientRequest extends Inspectable, Pipeable {
   readonly hash: Option.Option<string>
   readonly headers: Headers.Headers
   readonly body: Body.HttpBody
+  readonly unixSocket: Option.Option<string>
 }
 
 /**
@@ -56,6 +57,7 @@ export interface Options {
   readonly body?: Body.HttpBody | undefined
   readonly accept?: string | undefined
   readonly acceptJson?: boolean | undefined
+  readonly unixSocket?: string | undefined
 }
 
 /**
@@ -136,6 +138,15 @@ export const modify: {
   (options: Options): (self: HttpClientRequest) => HttpClientRequest
   (self: HttpClientRequest, options: Options): HttpClientRequest
 } = internal.modify
+
+/**
+ * @since 1.0.0
+ * @category combinators
+ */
+export const setUnixSocket: {
+  (path: string): (self: HttpClientRequest) => HttpClientRequest
+  (self: HttpClientRequest, path: string): HttpClientRequest
+} = internal.setUnixSocket
 
 /**
  * @since 1.0.0

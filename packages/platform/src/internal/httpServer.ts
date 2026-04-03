@@ -175,7 +175,12 @@ export const withLogAddress = <A, E, R>(
 export const makeTestClient = addressWith((address) =>
   Effect.flatMap(Client.HttpClient, (client) => {
     if (address._tag === "UnixAddress") {
-      return Effect.die(new Error("HttpServer.layerTestClient: UnixAddress not supported"))
+      return Effect.succeed(
+        Client.mapRequest(
+          client,
+          (req) => ClientRequest.setUnixSocket(ClientRequest.prependUrl(req, "http://localhost"), address.path)
+        )
+      )
     }
     const host = address.hostname === "0.0.0.0" ? "127.0.0.1" : address.hostname
     const url = `http://${host}:${address.port}`

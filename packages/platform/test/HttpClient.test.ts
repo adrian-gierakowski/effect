@@ -289,7 +289,8 @@ describe("HttpClient", () => {
       urlParams: [],
       hash: { _id: "Option", _tag: "None" },
       headers: { authorization: "<redacted>" },
-      body: { _id: "@effect/platform/HttpBody", _tag: "Empty" }
+      body: { _id: "@effect/platform/HttpBody", _tag: "Empty" },
+      unixSocket: { _id: "Option", _tag: "None" }
     })
   })
 

@@ -9,6 +9,7 @@ import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import { pipe } from "effect/Function"
 import * as Layer from "effect/Layer"
+import * as Option from "effect/Option"
 import type * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
 import * as Http from "node:http"
@@ -56,19 +57,18 @@ export const agentLayer = makeAgentLayer()
 
 const fromAgent = (agent: NodeClient.HttpAgent): Client.HttpClient =>
   Client.make((request, url, signal) => {
+    const options: Http.RequestOptions | Https.RequestOptions = {
+      agent: url.protocol === "https:" ? agent.https : agent.http,
+      method: request.method,
+      headers: request.headers,
+      signal
+    }
+    if (Option.isSome(request.unixSocket)) {
+      options.socketPath = request.unixSocket.value
+    }
     const nodeRequest = url.protocol === "https:" ?
-      Https.request(url, {
-        agent: agent.https,
-        method: request.method,
-        headers: request.headers,
-        signal
-      }) :
-      Http.request(url, {
-        agent: agent.http,
-        method: request.method,
-        headers: request.headers,
-        signal
-      })
+      Https.request(url, options) :
+      Http.request(url, options)
     return pipe(
       Effect.zipRight(sendBody(nodeRequest, request, request.body), waitForResponse(nodeRequest, request), {
         concurrent: true
